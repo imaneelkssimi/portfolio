@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SRP — Smart Rolling Platform · 3D Viewer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+
+:root {
+  --bg: #03050a;
+  --accent: #00e5ff;
+  --accent2: #ff4d00;
+  --green: #00ff88;
+  --purple: #8b5cf6;
+  --panel-bg: rgba(5,10,20,0.85);
+  --border: rgba(0,229,255,0.15);
+  --font-hud: 'Orbitron', monospace;
+  --font-body: 'Inter', sans-serif;
+}
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  font-family: var(--font-body);
+  color: #fff;
+}
+
+/* ── CANVAS ── */
+#canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  display: block;
+}
+#canvas:active { cursor: grabbing; }
+
+/* ── HUD OVERLAY ── */
+#hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* top bar */
+.top-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  padding: 20px 28px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(to bottom, rgba(3,5,10,0.9) 0%, transparent 100%);
+}
+.logo {
+  font-family: var(--font-hud);
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 6px;
+  color: var(--accent);
+  text-shadow: 0 0 20px rgba(0,229,255,0.6);
+}
+.logo span {
+  display: block;
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 3px;
+  color: rgba(255,255,255,0.35);
+  margin-top: 2px;
+}
+.status-row {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+.status-chip {
+  font-family: var(--font-hud);
+  font-size: 9px;
+  letter-spacing: 2px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  background: rgba(0,229,255,0.05);
+  color: var(--accent);
+}
+.live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: blink 1.4s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+/* corner brackets */
+.corner {
+  position: absolute;
+  width: 28px; height: 28px;
+}
+.corner-tl { top: 72px; left: 20px; border-top: 2px solid var(--accent); border-left: 2px solid var(--accent); }
+.corner-tr { top: 72px; right: 20px; border-top: 2px solid var(--accent); border-right: 2px solid var(--accent); }
+.corner-bl { bottom: 120px; left: 20px; border-bottom: 2px solid var(--accent); border-left: 2px solid var(--accent); }
+.corner-br { bottom: 120px; right: 20px; border-bottom: 2px solid var(--accent); border-right: 2px solid var(--accent); }
+
+/* ── LEFT PANEL — component list ── */
+#left-panel {
+  position: absolute;
+  left: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: all;
+}
+.comp-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--panel-bg);
+  border: 1px solid rgba(255,255,255,0.06);
+  backdrop-filter: blur(12px);
+  cursor: pointer;
+  transition: all 0.22s ease;
+  min-width: 210px;
+  position: relative;
+  overflow: hidden;
+}
+.comp-btn::before {
+  content:'';
+  position: absolute;
+  left:0; top:0; bottom:0;
+  width: 3px;
+  background: var(--accent);
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform 0.22s ease;
+}
+.comp-btn:hover, .comp-btn.sel {
+  border-color: rgba(0,229,255,0.3);
+  background: rgba(0,229,255,0.06);
+}
+.comp-btn:hover::before, .comp-btn.sel::before { transform: scaleY(1); }
+.comp-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 6px currentColor;
+}
+.comp-info { flex: 1; }
+.comp-name {
+  font-family: var(--font-hud);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: #fff;
+  display: block;
+  margin-bottom: 2px;
+}
+.comp-sub {
+  font-size: 9px;
+  color: rgba(255,255,255,0.35);
+  letter-spacing: 0.5px;
+}
+.comp-btn.sel .comp-name { color: var(--accent); }
+
+/* ── RIGHT PANEL — info card ── */
+#right-panel {
+  position: absolute;
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 240px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(16px);
+  padding: 20px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+#right-panel.show { opacity: 1; }
+.rp-label {
+  font-family: var(--font-hud);
+  font-size: 8px;
+  letter-spacing: 3px;
+  color: rgba(255,255,255,0.3);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+.rp-name {
+  font-family: var(--font-hud);
+  font-size: 16px;
+  letter-spacing: 2px;
+  color: var(--accent);
+  text-shadow: 0 0 12px rgba(0,229,255,0.4);
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+.rp-divider {
+  height: 1px;
+  background: linear-gradient(to right, var(--accent), transparent);
+  margin-bottom: 12px;
+}
+.rp-desc {
+  font-size: 11px;
+  color: rgba(255,255,255,0.55);
+  line-height: 1.7;
+  font-weight: 300;
+}
+.rp-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 14px;
+}
+.rp-tag {
+  font-family: var(--font-hud);
+  font-size: 8px;
+  letter-spacing: 1px;
+  padding: 3px 8px;
+  border: 1px solid rgba(0,229,255,0.2);
+  color: rgba(0,229,255,0.6);
+}
+
+/* ── BOTTOM BAR — controls ── */
+#bottom-bar {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  padding: 16px 28px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(to top, rgba(3,5,10,0.95) 0%, transparent 100%);
+  pointer-events: all;
+}
+.ctrl-group { display: flex; gap: 8px; align-items: center; }
+.ctrl-btn {
+  font-family: var(--font-hud);
+  font-size: 9px;
+  letter-spacing: 2px;
+  padding: 8px 16px;
+  background: rgba(0,229,255,0.06);
+  border: 1px solid rgba(0,229,255,0.2);
+  color: rgba(255,255,255,0.6);
+  cursor: pointer;
+  transition: all 0.2s;
+  text-transform: uppercase;
+}
+.ctrl-btn:hover {
+  background: rgba(0,229,255,0.12);
+  color: var(--accent);
+  border-color: rgba(0,229,255,0.5);
+}
+.ctrl-btn.active {
+  background: rgba(0,229,255,0.18);
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 12px rgba(0,229,255,0.2);
+}
+.ctrl-sep {
+  width: 1px; height: 24px;
+  background: rgba(255,255,255,0.1);
+  margin: 0 4px;
+}
+.hint-text {
+  font-size: 10px;
+  color: rgba(255,255,255,0.2);
+  letter-spacing: 1px;
+}
+
+/* ── TITLE OVERLAY (center-bottom) ── */
+.center-title {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  pointer-events: none;
+}
+.ct-name {
+  font-family: var(--font-hud);
+  font-size: 13px;
+  letter-spacing: 6px;
+  color: rgba(255,255,255,0.15);
+}
+
+/* ── SCAN LINE effect ── */
+.scanline {
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(0,0,0,0.03) 3px,
+    rgba(0,0,0,0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 9998;
+}
+
+/* mobile */
+@media (max-width: 700px) {
+  #left-panel { display: none; }
+  #right-panel { right: 8px; width: 180px; }
+  .top-bar { padding: 14px 16px; }
+  .logo { font-size: 16px; }
+  #bottom-bar { padding: 12px 14px; flex-wrap: wrap; gap: 8px; }
+}
+</style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+<div class="scanline"></div>
+
+<div id="hud">
+  <!-- Top bar -->
+  <div class="top-bar">
+    <div class="logo">SRP<span>Smart Rolling Platform</span></div>
+    <div class="status-row">
+      <div class="status-chip">INDUSTRIE 4.0</div>
+      <div class="status-chip">AGV · AUTONOMOUS</div>
+      <div class="live-dot"></div>
+    </div>
+  </div>
+
+  <!-- Corners -->
+  <div class="corner corner-tl"></div>
+  <div class="corner corner-tr"></div>
+  <div class="corner corner-bl"></div>
+  <div class="corner corner-br"></div>
+
+  <!-- Left panel -->
+  <div id="left-panel">
+    <button class="comp-btn sel" onclick="select('all',this)">
+      <div class="comp-dot" style="color:#00e5ff;background:#00e5ff"></div>
+      <div class="comp-info">
+        <span class="comp-name">VUE ASSEMBLÉE</span>
+        <span class="comp-sub">Robot complet</span>
+      </div>
+    </button>
+    <button class="comp-btn" onclick="select('chassis',this)">
+      <div class="comp-dot" style="color:#94a3b8;background:#94a3b8"></div>
+      <div class="comp-info">
+        <span class="comp-name">CHÂSSIS</span>
+        <span class="comp-sub">Structure aluminium</span>
+      </div>
+    </button>
+    <button class="comp-btn" onclick="select('surface',this)">
+      <div class="comp-dot" style="color:#e2e8f0;background:#e2e8f0"></div>
+      <div class="comp-info">
+        <span class="comp-name">SURFACE DE TRANSPORT</span>
+        <span class="comp-sub">Plateau de charge</span>
+      </div>
+    </button>
+    <button class="comp-btn" onclick="select('wheels',this)">
+      <div class="comp-dot" style="color:#ff4d00;background:#ff4d00"></div>
+      <div class="comp-info">
+        <span class="comp-name">ROUES MOTORISÉES</span>
+        <span class="comp-sub">4× entraînement indépendant</span>
+      </div>
+    </button>
+    <button class="comp-btn" onclick="select('battery',this)">
+      <div class="comp-dot" style="color:#00ff88;background:#00ff88"></div>
+      <div class="comp-info">
+        <span class="comp-name">BATTERIE LI-ION</span>
+        <span class="comp-sub">Autonomie 8 heures</span>
+      </div>
+    </button>
+    <button class="comp-btn" onclick="select('controller',this)">
+      <div class="comp-dot" style="color:#8b5cf6;background:#8b5cf6"></div>
+      <div class="comp-info">
+        <span class="comp-name">MICROCONTRÔLEUR</span>
+        <span class="comp-sub">Navigation IA</span>
+      </div>
+    </button>
+    <button class="comp-btn" onclick="select('ultrasonic',this)">
+      <div class="comp-dot" style="color:#00e5ff;background:#00e5ff"></div>
+      <div class="comp-info">
+        <span class="comp-name">CAPTEURS ULTRASONIQUES</span>
+        <span class="comp-sub">Détection obstacles 360°</span>
+      </div>
+    </button>
+    <button class="comp-btn" onclick="select('ir',this)">
+      <div class="comp-dot" style="color:#fbbf24;background:#fbbf24"></div>
+      <div class="comp-info">
+        <span class="comp-name">CAPTEURS IR</span>
+        <span class="comp-sub">Suivi de ligne</span>
+      </div>
+    </button>
+    <button class="comp-btn" onclick="select('motors',this)">
+      <div class="comp-dot" style="color:#f472b6;background:#f472b6"></div>
+      <div class="comp-info">
+        <span class="comp-name">MOTEURS</span>
+        <span class="comp-sub">Entraînement DC</span>
+      </div>
+    </button>
+  </div>
+
+  <!-- Right info panel -->
+  <div id="right-panel">
+    <div class="rp-label">COMPOSANT ACTIF</div>
+    <div class="rp-name" id="rp-name">—</div>
+    <div class="rp-divider"></div>
+    <div class="rp-desc" id="rp-desc">—</div>
+    <div class="rp-tags" id="rp-tags"></div>
+  </div>
+
+  <!-- Center title -->
+  <div class="center-title">
+    <div class="ct-name">DRAG · SCROLL TO ZOOM · SELECT COMPONENT</div>
+  </div>
+
+  <!-- Bottom bar -->
+  <div id="bottom-bar">
+    <div class="ctrl-group">
+      <button class="ctrl-btn active" id="btn-explode" onclick="toggleExplode()">⊞ VUE ÉCLATÉE</button>
+      <div class="ctrl-sep"></div>
+      <button class="ctrl-btn active" id="btn-rotate" onclick="toggleRotate()">↻ AUTO-ROTATION</button>
+      <div class="ctrl-sep"></div>
+      <button class="ctrl-btn" onclick="resetCamera()">⊙ RESET</button>
+    </div>
+    <div class="hint-text">← GLISSER POUR PIVOTER · MOLETTE POUR ZOOMER →</div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+//  SRP 3D INTERNAL VIEWER — Full page, Three.js
+// ══════════════════════════════════════════════
+
+const W = window.innerWidth, H = window.innerHeight;
+
+// Scene
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(42, W/H, 0.05, 200);
+camera.position.set(0, 2.5, 7.5);
+camera.lookAt(0, 0, 0);
+
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas'), antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(W, H);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.3;
+
+// ─── LIGHTS ───
+scene.add(new THREE.AmbientLight(0x050d18, 3));
+
+const key = new THREE.DirectionalLight(0xffffff, 4);
+key.position.set(6, 10, 6);
+key.castShadow = true;
+key.shadow.mapSize.set(2048,2048);
+key.shadow.camera.near = 0.5;
+key.shadow.camera.far = 50;
+key.shadow.bias = -0.001;
+scene.add(key);
+
+const fill = new THREE.DirectionalLight(0x00c8ff, 2);
+fill.position.set(-8, 4, 2);
+scene.add(fill);
+
+const rim = new THREE.DirectionalLight(0x4433ff, 1.5);
+rim.position.set(0, -5, -8);
+scene.add(rim);
+
+const bot = new THREE.PointLight(0x00e5ff, 1.2, 15);
+bot.position.set(0, -2, 0);
+scene.add(bot);
+
+// ─── MATERIALS ───
+function mat(color, metal=0.5, rough=0.4, emissive=null, emInt=0) {
+  const m = new THREE.MeshStandardMaterial({ color, metalness:metal, roughness:rough });
+  if (emissive) { m.emissive = new THREE.Color(emissive); m.emissiveIntensity = emInt; }
+  return m;
+}
+function matT(color, metal=0.5, rough=0.4, opacity=0.5) {
+  return new THREE.MeshStandardMaterial({ color, metalness:metal, roughness:rough, transparent:true, opacity, side:THREE.DoubleSide });
+}
+
+const M = {
+  bodyBlack:   mat(0x0d1520, 0.7, 0.3),
+  bodyMetal:   mat(0xb8c4d8, 0.95, 0.15),
+  bodyDark:    mat(0x1a2235, 0.6, 0.4),
+  surface:     mat(0xdde3ef, 0.95, 0.08),
+  surfaceEdge: mat(0x8090a8, 0.9, 0.2),
+  wheel:       mat(0x0d1015, 0.05, 0.92),
+  wheelHub:    mat(0x6a7a90, 0.95, 0.12),
+  wheelSpoke:  mat(0x445060, 0.9, 0.2),
+  battery:     mat(0x0a4a20, 0.2, 0.6, 0x00ff44, 0.2),
+  battCell:    mat(0x166534, 0.3, 0.5, 0x00ff88, 0.15),
+  battTop:     mat(0x052e16, 0.4, 0.5, 0x00ff88, 0.08),
+  pcb:         mat(0x0a3020, 0.3, 0.6),
+  chip:        mat(0x111827, 0.6, 0.3, 0x8b5cf6, 0.3),
+  cpu:         mat(0x1e1b4b, 0.5, 0.35, 0x7c3aed, 0.5),
+  usBody:      mat(0x00aacc, 0.7, 0.2, 0x00e5ff, 0.6),
+  usMembrane:  mat(0x002833, 0.1, 0.8, 0x00d4ff, 0.3),
+  irLed:       mat(0xfbbf24, 0.3, 0.5, 0xfbbf24, 1.5),
+  irBody:      mat(0x1a0a00, 0.4, 0.7),
+  motor:       mat(0x2a1a2e, 0.7, 0.3, 0xf472b6, 0.2),
+  motorShaft:  mat(0x7a7a8a, 0.95, 0.1),
+  cable:       mat(0x111111, 0.1, 0.9),
+  glass:       matT(0x00e5ff, 0.1, 0.1, 0.12),
+  glowCyan:    mat(0x00e5ff, 0.1, 0.1, 0x00e5ff, 3),
+  glowOrange:  mat(0xff4d00, 0.1, 0.1, 0xff4d00, 2.5),
+  glowGreen:   mat(0x00ff88, 0.1, 0.1, 0x00ff88, 2),
+  glowPurple:  mat(0x8b5cf6, 0.1, 0.1, 0x8b5cf6, 2),
+  grid:        mat(0x2a3040, 0.5, 0.7),
+  rubber:      mat(0x080a0e, 0.0, 1.0),
+};
+
+// ─── PART REGISTRY ───
+const partMeshes = {};   // partName → [mesh, ...]
+const origPos    = {};   // mesh.uuid → Vector3
+
+function addMesh(geo, material, pos, rot, partName) {
+  const m = new THREE.Mesh(geo, material.clone ? material.clone() : material);
+  m.position.set(...pos);
+  if (rot) m.rotation.set(...rot);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  m.userData.part = partName;
+  scene.add(m);
+  if (!partMeshes[partName]) partMeshes[partName] = [];
+  partMeshes[partName].push(m);
+  origPos[m.uuid] = m.position.clone();
+  return m;
+}
+
+// ─── BUILD ROBOT ───
+
+// ═══ CHASSIS ═══
+// Main body block
+addMesh(new THREE.BoxGeometry(3.6, 0.6, 2.2), M.bodyBlack, [0,0,0], null, 'chassis');
+// Inner cavity (slightly transparent shell effect)
+addMesh(new THREE.BoxGeometry(3.3, 0.45, 1.9), M.bodyDark, [0,0.02,0], null, 'chassis');
+// Top trim
+addMesh(new THREE.BoxGeometry(3.65, 0.05, 2.25), M.bodyMetal, [0,0.325,0], null, 'chassis');
+// Bottom trim
+addMesh(new THREE.BoxGeometry(3.65, 0.05, 2.25), M.bodyMetal, [0,-0.325,0], null, 'chassis');
+// Side trims
+for (let s of [-1,1]) {
+  addMesh(new THREE.BoxGeometry(0.05, 0.55, 2.2), M.bodyMetal, [s*1.825, 0, 0], null, 'chassis');
+}
+// Front/back trims
+for (let s of [-1,1]) {
+  addMesh(new THREE.BoxGeometry(3.6, 0.55, 0.05), M.bodyMetal, [0,0,s*1.125], null, 'chassis');
+}
+// Front grille
+for (let i=-1; i<=1; i+=1) {
+  addMesh(new THREE.BoxGeometry(0.6, 0.16, 0.04), M.grid, [i*0.25, 0, 1.13], null, 'chassis');
+}
+// Accent glow strips (sides)
+addMesh(new THREE.BoxGeometry(3.4, 0.02, 0.02), M.glowCyan, [0,-0.28, 1.12], null, 'chassis');
+addMesh(new THREE.BoxGeometry(3.4, 0.02, 0.02), M.glowCyan, [0,-0.28,-1.12], null, 'chassis');
+
+// ═══ SURFACE DE TRANSPORT ═══
+addMesh(new THREE.BoxGeometry(3.4, 0.04, 2.05), M.surface, [0, 0.37, 0], null, 'surface');
+// Surface grid lines
+for (let x=-1.2; x<=1.2; x+=0.6) {
+  addMesh(new THREE.BoxGeometry(0.015, 0.005, 1.9), M.surfaceEdge, [x, 0.395, 0], null, 'surface');
+}
+for (let z=-0.8; z<=0.8; z+=0.4) {
+  addMesh(new THREE.BoxGeometry(3.2, 0.005, 0.015), M.surfaceEdge, [0, 0.395, z], null, 'surface');
+}
+// Edge lip
+addMesh(new THREE.BoxGeometry(3.5, 0.025, 2.15), M.surfaceEdge, [0, 0.395, 0], null, 'surface');
+
+// ═══ ROUES MOTORISÉES (4 wheels) ═══
+const wheelPos = [
+  [-1.4, -0.32, 0.9],
+  [ 1.4, -0.32, 0.9],
+  [-1.4, -0.32,-0.9],
+  [ 1.4, -0.32,-0.9],
+];
+for (let [wx,wy,wz] of wheelPos) {
+  // Tire
+  const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.24, 28), M.wheel.clone());
+  tire.rotation.z = Math.PI/2;
+  tire.position.set(wx,wy,wz);
+  tire.castShadow = true;
+  tire.userData.part = 'wheels';
+  scene.add(tire);
+  partMeshes['wheels'] = partMeshes['wheels']||[];
+  partMeshes['wheels'].push(tire);
+  origPos[tire.uuid] = tire.position.clone();
+
+  // Rubber tread rings
+  for (let t=0; t<3; t++) {
+    const tread = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.018, 8, 28), M.rubber.clone());
+    tread.rotation.x = Math.PI/2;
+    tread.position.set(wx, wy, wz);
+    tread.userData.part='wheels'; scene.add(tread);
+    partMeshes['wheels'].push(tread);
+    origPos[tread.uuid]=tread.position.clone();
+  }
+  // Hub
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.26, 6), M.wheelHub.clone());
+  hub.rotation.z = Math.PI/2;
+  hub.position.set(wx,wy,wz);
+  hub.castShadow=true; hub.userData.part='wheels'; scene.add(hub);
+  partMeshes['wheels'].push(hub);
+  origPos[hub.uuid]=hub.position.clone();
+
+  // Spokes
+  for (let s=0; s<6; s++) {
+    const angle = (s/6)*Math.PI*2;
+    const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.25, 0.028), M.wheelSpoke.clone());
+    spoke.position.set(wx+Math.cos(angle)*0.05, wy+Math.sin(angle)*0.09, wz);
+    spoke.rotation.z = angle;
+    spoke.userData.part='wheels'; scene.add(spoke);
+    partMeshes['wheels'].push(spoke);
+    origPos[spoke.uuid]=spoke.position.clone();
+  }
+  // Center cap
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,0.28,16), M.glowCyan.clone());
+  cap.rotation.z=Math.PI/2;
+  cap.position.set(wx,wy,wz);
+  cap.userData.part='wheels'; scene.add(cap);
+  partMeshes['wheels'].push(cap);
+  origPos[cap.uuid]=cap.position.clone();
+
+  // Axle housing
+  const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,0.32,12), M.motorShaft.clone());
+  axle.rotation.z=Math.PI/2;
+  axle.position.set(wx+(wx>0?-0.12:0.12), wy, wz);
+  axle.userData.part='wheels'; scene.add(axle);
+  partMeshes['wheels'].push(axle);
+  origPos[axle.uuid]=axle.position.clone();
+}
+
+// ═══ BATTERIE ═══
+addMesh(new THREE.BoxGeometry(2.0, 0.24, 1.5), M.battery, [0,-0.17,0], null, 'battery');
+// Battery cells
+for (let bx=-0.6; bx<=0.6; bx+=0.6) {
+  for (let bz=-0.5; bz<=0.5; bz+=0.5) {
+    addMesh(new THREE.BoxGeometry(0.42, 0.20, 0.35), M.battCell, [bx,-0.165,bz], null, 'battery');
+  }
+}
+// Battery top connector plate
+addMesh(new THREE.BoxGeometry(1.8, 0.03, 1.3), M.battTop, [0,-0.04,0], null, 'battery');
+// Terminals
+for (let s of [-0.6,0.6]) {
+  addMesh(new THREE.CylinderGeometry(0.05,0.05,0.06,12), M.battCell, [s,-0.035,0.55], null, 'battery');
+  addMesh(new THREE.SphereGeometry(0.025, 8,8), M.glowGreen, [s,0.0,0.55], null, 'battery');
+}
+// Battery glow
+addMesh(new THREE.BoxGeometry(1.85,0.005,1.35), M.glowGreen, [0,-0.04,0], null, 'battery');
+
+// ═══ MICROCONTRÔLEUR (PCB) ═══
+addMesh(new THREE.BoxGeometry(0.85, 0.04, 0.7), M.pcb, [-0.5, 0.08, 0.15], null, 'controller');
+// Main CPU
+addMesh(new THREE.BoxGeometry(0.18, 0.04, 0.18), M.cpu, [-0.5, 0.1, 0.15], null, 'controller');
+// Chips
+const chipPos = [[-0.68,0.1,0.03],[-0.52,0.1,-0.12],[-0.32,0.1,0.28],[-0.72,0.1,0.3]];
+for (let cp of chipPos) addMesh(new THREE.BoxGeometry(0.08,0.035,0.08), M.chip, cp, null,'controller');
+// PCB traces (lines)
+for (let i=0; i<5; i++) {
+  addMesh(new THREE.BoxGeometry(0.5,0.002,0.008), M.glowPurple, [-0.5+i*0.04, 0.11, 0.12+i*0.03], null,'controller');
+}
+// LED indicators
+const ledColors = [M.glowCyan, M.glowGreen, M.glowOrange];
+for (let i=0; i<3; i++) {
+  addMesh(new THREE.SphereGeometry(0.016,8,8), ledColors[i], [-0.22+i*0.06, 0.12, 0.44], null,'controller');
+}
+// Connector port
+addMesh(new THREE.BoxGeometry(0.12,0.05,0.04), M.grid, [-0.5,0.06,-0.27], null,'controller');
+
+// ═══ CAPTEURS ULTRASONIQUES ═══
+const usPos = [
+  [0,   0.04,  1.12],   // front center
+  [0.5, 0.04,  1.12],   // front right
+  [-0.5,0.04,  1.12],   // front left
+  [0,   0.04, -1.12],   // back
+  [1.83,0.04,  0.4],    // right-f
+  [1.83,0.04, -0.4],    // right-b
+  [-1.83,0.04, 0.4],    // left-f
+  [-1.83,0.04,-0.4],    // left-b
+];
+for (let [ux,uy,uz] of usPos) {
+  const isFront = uz > 0;
+  const isBack  = uz < -0.5 && Math.abs(ux)<0.5;
+  const isSide  = Math.abs(ux)>1.5;
+
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.058,0.058,0.065,16), M.usBody.clone());
+  body.rotation.x = Math.PI/2;
+  body.position.set(ux,uy,uz);
+  body.userData.part='ultrasonic'; scene.add(body);
+  partMeshes['ultrasonic']=partMeshes['ultrasonic']||[];
+  partMeshes['ultrasonic'].push(body);
+  origPos[body.uuid]=body.position.clone();
+
+  const membrane = new THREE.Mesh(new THREE.CircleGeometry(0.04,16), M.usMembrane.clone());
+  membrane.position.set(ux, uy, uz+(uz>=0?0.035:-0.035));
+  if (isSide) {
+    membrane.rotation.y = Math.PI/2;
+    membrane.position.set(uz>0?ux+0.035:ux-0.035, uy, uz+(uz>=0?0:0));
+  }
+  membrane.userData.part='ultrasonic'; scene.add(membrane);
+  partMeshes['ultrasonic'].push(membrane);
+  origPos[membrane.uuid]=membrane.position.clone();
+
+  // glow ring
+  const gring = new THREE.Mesh(new THREE.TorusGeometry(0.058,0.006,8,16), M.glowCyan.clone());
+  gring.rotation.x=Math.PI/2;
+  gring.position.set(ux,uy,uz);
+  gring.userData.part='ultrasonic'; scene.add(gring);
+  partMeshes['ultrasonic'].push(gring);
+  origPos[gring.uuid]=gring.position.clone();
+}
+
+// ═══ CAPTEURS INFRAROUGES ═══
+const irPos = [
+  [-0.5,-0.31, 1.13],
+  [ 0,  -0.31, 1.13],
+  [ 0.5,-0.31, 1.13],
+  [-0.5,-0.31,-1.13],
+  [ 0,  -0.31,-1.13],
+  [ 0.5,-0.31,-1.13],
+];
+for (let [ix,iy,iz] of irPos) {
+  addMesh(new THREE.BoxGeometry(0.065,0.04,0.045), M.irBody, [ix,iy,iz], null,'ir');
+  addMesh(new THREE.SphereGeometry(0.022,8,8), M.irLed, [ix,iy,iz+(iz>0?0.024:-0.024)], null,'ir');
+}
+
+// ═══ MOTEURS ═══
+const motorPositions = [
+  [-1.1, -0.15,  0.9],
+  [ 1.1, -0.15,  0.9],
+  [-1.1, -0.15, -0.9],
+  [ 1.1, -0.15, -0.9],
+];
+for (let [mx,my,mz] of motorPositions) {
+  // Motor body
+  addMesh(new THREE.CylinderGeometry(0.095,0.095,0.35,16), M.motor, [mx,my,mz], [0,0,Math.PI/2], 'motors');
+  // Motor shaft
+  addMesh(new THREE.CylinderGeometry(0.025,0.025,0.5,12), M.motorShaft, [mx+(mx>0?0.2:-0.2),my,mz], [0,0,Math.PI/2], 'motors');
+  // Motor casing end
+  addMesh(new THREE.CylinderGeometry(0.1,0.1,0.02,16), M.motorShaft, [mx+(mx>0?-0.18:0.18),my,mz], [0,0,Math.PI/2],'motors');
+  // Glow ring
+  addMesh(new THREE.TorusGeometry(0.095,0.008,8,16), M.glowOrange, [mx,my,mz], [Math.PI/2,0,0],'motors');
+  // Wires
+  for (let c=0;c<2;c++) {
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(mx+(mx>0?-0.18:0.18), my, mz),
+      new THREE.Vector3(mx+(mx>0?-0.4:0.4), my+0.08+c*0.04, mz),
+      new THREE.Vector3(mx+(mx>0?-0.5:0.5), my+0.15, mz),
+    ]);
+    const tubeGeo = new THREE.TubeGeometry(curve, 12, 0.008, 6, false);
+    const wire = new THREE.Mesh(tubeGeo, c===0?M.glowCyan.clone():M.cable.clone());
+    wire.userData.part='motors'; scene.add(wire);
+    partMeshes['motors'].push(wire);
+    origPos[wire.uuid]=wire.position.clone();
+  }
+}
+
+// ─── GROUND ───
+const gnd = new THREE.Mesh(
+  new THREE.PlaneGeometry(20,20),
+  new THREE.MeshStandardMaterial({ color:0x03050a, roughness:1, metalness:0 })
+);
+gnd.rotation.x=-Math.PI/2;
+gnd.position.y=-1.1;
+gnd.receiveShadow=true;
+scene.add(gnd);
+
+// Ground ring glow
+const gndRing = new THREE.Mesh(
+  new THREE.RingGeometry(2.2, 2.6, 64),
+  new THREE.MeshBasicMaterial({ color:0x00e5ff, transparent:true, opacity:0.06, side:THREE.DoubleSide })
+);
+gndRing.rotation.x=-Math.PI/2;
+gndRing.position.y=-1.09;
+scene.add(gndRing);
+
+// ─── EXPLODE CONFIG ───
+const explodeVectors = {
+  surface:    new THREE.Vector3( 0,  2.2,  0),
+  chassis:    new THREE.Vector3( 0,  0,    0),
+  wheels:     new THREE.Vector3( 0, -1.2,  0),
+  battery:    new THREE.Vector3( 0, -2.0,  0),
+  controller: new THREE.Vector3(-2.2, 1.2, 0),
+  ultrasonic: new THREE.Vector3( 0,  0.8,  1.6),
+  ir:         new THREE.Vector3( 0, -0.8,  1.8),
+  motors:     new THREE.Vector3( 1.4,-0.5, 0),
+};
+
+// ─── COMPONENT INFO ───
+const INFO = {
+  chassis: {
+    name: 'CHÂSSIS',
+    desc: 'Structure rectangulaire compacte en aluminium et polymères renforcés. Assure la stabilité, la maniabilité et la capacité de charge. Optimisé pour les environnements industriels contraints.',
+    tags: ['Aluminium', 'Polymère renforcé', 'Compact']
+  },
+  surface: {
+    name: 'SURFACE DE TRANSPORT',
+    desc: 'Plateau supérieur poli à haute planéité. Conçu pour stabiliser les caisses, conteneurs, matières premières et pièces WIP lors des déplacements.',
+    tags: ['Haute planéité', 'Anti-glisse', 'Charge stable']
+  },
+  wheels: {
+    name: 'ROUES MOTORISÉES',
+    desc: '4 roues à entraînement indépendant. Haute traction industrielle, pivotement précis, déplacement fluide même dans des couloirs contraints.',
+    tags: ['4× indépendant', 'Haute traction', 'Pivot précis']
+  },
+  battery: {
+    name: 'BATTERIE LI-ION',
+    desc: 'Pack haute densité d\'énergie — autonomie 8 heures couvrant un cycle de production complet. Recharge rapide, gestion thermique intégrée.',
+    tags: ['8H autonomie', 'Li-Ion HD', 'BMS intégré']
+  },
+  controller: {
+    name: 'MICROCONTRÔLEUR',
+    desc: 'Cerveau central du SRP. Gère la navigation autonome, l\'optimisation des trajets, la fusion des données capteurs et la communication système.',
+    tags: ['Navigation IA', 'Temps réel', 'Multi-capteurs']
+  },
+  ultrasonic: {
+    name: 'CAPTEURS ULTRASONIQUES',
+    desc: 'Réseau de 8 capteurs ultrasoniques multidirectionnel. Détection d\'obstacles en temps réel, prévention des collisions, sécurité opérateurs garantie.',
+    tags: ['360° coverage', 'Anti-collision', 'Temps réel']
+  },
+  ir: {
+    name: 'CAPTEURS INFRAROUGES',
+    desc: 'Réseau de capteurs IR pour le suivi de ligne au sol. Trajectoire précise et répétable entre zones de stockage et postes de production.',
+    tags: ['Line following', 'Précis', 'Répétable']
+  },
+  motors: {
+    name: 'MOTEURS DC',
+    desc: 'Moteurs à courant continu à couple élevé pour l\'entraînement des roues. Contrôle indépendant par axe, efficacité énergétique optimisée.',
+    tags: ['Haut couple', 'DC drive', 'Encodeur']
+  },
+};
+
+// ─── STATE ───
+let selected = 'all';
+let exploded = true;
+let autoRot  = true;
+let rotY     = 0.4, rotX = 0.08;
+let tRotY    = 0.4, tRotX = 0.08;
+let dragging = false, lastMX=0, lastMY=0;
+let clock    = 0;
+let camDist  = 7.5;
+let tCamDist = 7.5;
+let rootGroup = new THREE.Group();
+scene.add(rootGroup);
+
+// Move all part meshes into rootGroup
+Object.values(partMeshes).forEach(arr => arr.forEach(m => { scene.remove(m); rootGroup.add(m); }));
+// Also the chassis ones
+if (partMeshes['chassis']) partMeshes['chassis'].forEach(m => { scene.remove(m); rootGroup.add(m); });
+
+// ─── EXPLODE ANIMATION ───
+let explodeT = 1.0; // 0=assembled, 1=exploded
+
+function getExplodeTarget(part) {
+  return explodeVectors[part] || new THREE.Vector3();
+}
+
+function updateMeshPositions() {
+  for (const [partName, meshes] of Object.entries(partMeshes)) {
+    const offset = getExplodeTarget(partName);
+    for (const m of meshes) {
+      const orig = origPos[m.uuid];
+      if (!orig) continue;
+      const tx = orig.x + offset.x * explodeT;
+      const ty = orig.y + offset.y * explodeT;
+      const tz = orig.z + offset.z * explodeT;
+      m.position.x += (tx - m.position.x) * 0.09;
+      m.position.y += (ty - m.position.y) * 0.09;
+      m.position.z += (tz - m.position.z) * 0.09;
+    }
+  }
+}
+
+// ─── HIGHLIGHT ───
+function applyHighlight(sel) {
+  const allMeshes = [];
+  for (const arr of Object.values(partMeshes)) allMeshes.push(...arr);
+
+  for (const m of allMeshes) {
+    if (!m.material) continue;
+    if (sel === 'all') {
+      m.material.transparent = false;
+      m.material.opacity = 1;
+    } else if (m.userData.part === sel) {
+      m.material.transparent = false;
+      m.material.opacity = 1;
+    } else {
+      m.material.transparent = true;
+      m.material.opacity = 0.04;
+    }
+    m.material.needsUpdate = true;
+  }
+}
+
+// ─── UI FUNCTIONS ───
+window.select = function(part, btn) {
+  selected = part;
+  document.querySelectorAll('.comp-btn').forEach(b => b.classList.remove('sel'));
+  if (btn) btn.classList.add('sel');
+  applyHighlight(part);
+
+  const rp = document.getElementById('right-panel');
+  if (part !== 'all' && INFO[part]) {
+    document.getElementById('rp-name').textContent = INFO[part].name;
+    document.getElementById('rp-desc').textContent = INFO[part].desc;
+    const tagsEl = document.getElementById('rp-tags');
+    tagsEl.innerHTML = INFO[part].tags.map(t=>`<span class="rp-tag">${t}</span>`).join('');
+    rp.classList.add('show');
+  } else {
+    rp.classList.remove('show');
+  }
+};
+
+window.toggleExplode = function() {
+  exploded = !exploded;
+  explodeT = exploded ? 1 : 0;
+  document.getElementById('btn-explode').classList.toggle('active', exploded);
+};
+
+window.toggleRotate = function() {
+  autoRot = !autoRot;
+  document.getElementById('btn-rotate').classList.toggle('active', autoRot);
+};
+
+window.resetCamera = function() {
+  tRotY = 0.4; tRotX = 0.08; tCamDist = 7.5;
+};
+
+// ─── MOUSE / TOUCH ───
+const c = document.getElementById('canvas');
+
+c.addEventListener('mousedown', e => {
+  dragging=true; lastMX=e.clientX; lastMY=e.clientY; autoRot=false;
+  document.getElementById('btn-rotate').classList.remove('active');
+});
+c.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  tRotY += (e.clientX-lastMX)*0.008;
+  tRotX += (e.clientY-lastMY)*0.006;
+  tRotX = Math.max(-0.55, Math.min(0.55, tRotX));
+  lastMX=e.clientX; lastMY=e.clientY;
+});
+c.addEventListener('mouseup', ()=>{ dragging=false; });
+c.addEventListener('mouseleave', ()=>{ dragging=false; });
+c.addEventListener('wheel', e=>{
+  e.preventDefault();
+  tCamDist = Math.max(3, Math.min(14, tCamDist + e.deltaY*0.01));
+}, {passive:false});
+
+let ltd=null;
+c.addEventListener('touchstart', e=>{
+  if (e.touches.length===1){ dragging=true; lastMX=e.touches[0].clientX; lastMY=e.touches[0].clientY; autoRot=false; }
+});
+c.addEventListener('touchmove', e=>{
+  e.preventDefault();
+  if (e.touches.length===1 && dragging){
+    tRotY+=(e.touches[0].clientX-lastMX)*0.008;
+    tRotX+=(e.touches[0].clientY-lastMY)*0.006;
+    tRotX=Math.max(-0.55,Math.min(0.55,tRotX));
+    lastMX=e.touches[0].clientX; lastMY=e.touches[0].clientY;
+  }
+  if (e.touches.length===2){
+    const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+    if (ltd) tCamDist=Math.max(3,Math.min(14,tCamDist*(ltd/d)));
+    ltd=d;
+  }
+},{passive:false});
+c.addEventListener('touchend', ()=>{ dragging=false; ltd=null; });
+
+// ─── RESIZE ───
+window.addEventListener('resize', ()=>{
+  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ─── ANIMATE ───
+function animate() {
+  requestAnimationFrame(animate);
+  clock += 0.016;
+
+  // camera
+  if (autoRot && !dragging) tRotY += 0.004;
+  rotY += (tRotY-rotY)*0.07;
+  rotX += (tRotX-rotX)*0.07;
+  camDist += (tCamDist-camDist)*0.08;
+
+  rootGroup.rotation.y = rotY;
+  rootGroup.rotation.x = rotX;
+
+  camera.position.set(0, 2.2, camDist);
+  camera.lookAt(0, 0.2, 0);
+
+  // explode
+  explodeT += ((exploded?1:0)-explodeT)*0.07;
+  updateMeshPositions();
+
+  // wheel spin
+  if (partMeshes['wheels']) {
+    partMeshes['wheels'].forEach(m => {
+      if (m.geometry.type==='CylinderGeometry'||m.geometry.type==='TorusGeometry') {
+        m.rotation.x = clock*0.8;
+      }
+    });
+  }
+
+  // pulse emissives
+  const p = Math.sin(clock*2)*0.5+0.5;
+  const p2 = Math.sin(clock*3+1)*0.5+0.5;
+
+  if (partMeshes['ultrasonic']) {
+    partMeshes['ultrasonic'].forEach(m => {
+      if (m.material.emissive && m.material.color.getHex()===0x00aacc) {
+        m.material.emissiveIntensity = 0.3+p*0.8;
+      }
+    });
+  }
+  if (partMeshes['ir']) {
+    partMeshes['ir'].forEach(m => {
+      if (m.material.color && m.material.color.getHex()===0xfbbf24) {
+        m.material.emissiveIntensity = 0.8+p2*2;
+      }
+    });
+  }
+  if (partMeshes['battery']) {
+    partMeshes['battery'].forEach(m => {
+      if (m.material.color && m.material.color.getHex()===0x00ff88) {
+        m.material.emissiveIntensity = 1.5+p*3;
+      }
+    });
+  }
+  if (partMeshes['controller']) {
+    partMeshes['controller'].forEach(m => {
+      if (m.material.emissive && m.material.color.getHex()===0x8b5cf6) {
+        m.material.emissiveIntensity = 1+p2*2;
+      }
+    });
+  }
+
+  // bot glow pulse
+  bot.intensity = 0.6 + p*0.7;
+  gndRing.material.opacity = 0.04 + p*0.04;
+  gndRing.rotation.z = clock*0.08;
+
+  renderer.render(scene, camera);
+}
+
+animate();
+</script>
+</body>
+</html>

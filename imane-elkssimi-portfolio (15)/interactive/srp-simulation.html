@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Smart Rolling Platform — Simulation Logistique</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --border: rgba(99,179,237,0.15);
+    --accent: #63b3ed;
+    --accent2: #4fd1c5;
+    --warn: #f6ad55;
+    --danger: #fc8181;
+    --success: #68d391;
+    --text: #e2e8f0;
+    --muted: #718096;
+    --font-mono: 'Space Mono', monospace;
+    --font-ui: 'Syne', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px 40px;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(99,179,237,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(99,179,237,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none; z-index: 0;
+  }
+
+  .wrapper { position: relative; z-index: 1; width: 100%; max-width: 900px; }
+
+  header { text-align: center; margin-bottom: 28px; }
+  header .badge {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 3px 10px;
+    border-radius: 2px;
+    margin-bottom: 12px;
+  }
+  header h1 {
+    font-size: clamp(22px, 4vw, 34px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    line-height: 1.1;
+  }
+  header h1 span { color: var(--accent); }
+  header p {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 8px;
+    font-family: var(--font-mono);
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  /* Stats bar */
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .stat {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    text-align: center;
+  }
+  .stat-label { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-family: var(--font-mono); }
+  .stat-value { font-size: 18px; font-weight: 800; margin-top: 2px; }
+  .stat-value.blue { color: var(--accent); }
+  .stat-value.green { color: var(--success); }
+  .stat-value.amber { color: var(--warn); }
+  .stat-value.red { color: var(--danger); }
+
+  /* Scene SVG */
+  #scene-wrap {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 4px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  #scene { display: block; width: 100%; }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  select {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 8px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    cursor: pointer;
+    flex: 1;
+    min-width: 200px;
+  }
+  button {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 1px solid;
+    letter-spacing: 0.05em;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  button:active { transform: scale(0.97); }
+  .btn-primary { background: rgba(99,179,237,0.12); border-color: var(--accent); color: var(--accent); }
+  .btn-primary:hover { background: rgba(99,179,237,0.22); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-danger { background: rgba(252,129,129,0.10); border-color: var(--danger); color: var(--danger); }
+  .btn-danger:hover { background: rgba(252,129,129,0.20); }
+  .btn-reset { background: transparent; border-color: rgba(113,128,150,0.4); color: var(--muted); }
+  .btn-reset:hover { border-color: var(--muted); color: var(--text); }
+
+  /* Log */
+  #log-box {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.8;
+    background: #070b14;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    max-height: 150px;
+    overflow-y: auto;
+    color: #a0aec0;
+  }
+  #log-box .log-ok { color: var(--success); }
+  #log-box .log-warn { color: var(--warn); }
+  #log-box .log-info { color: var(--accent); }
+  #log-box .log-err { color: var(--danger); }
+
+  /* Battery bar */
+  .bat-wrap { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+  .bat-track { flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+  #bat-fill { height: 100%; border-radius: 3px; transition: width 0.4s, background 0.4s; }
+  .bat-label { font-family: var(--font-mono); font-size: 11px; color: var(--muted); min-width: 36px; text-align: right; }
+
+  footer { text-align: center; margin-top: 20px; font-size: 10px; color: var(--muted); font-family: var(--font-mono); letter-spacing: 0.1em; }
+
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+  @keyframes moveWheel { to { stroke-dashoffset: -8; } }
+  @keyframes scanPulse { 0%,100%{opacity:0.3;r:10} 50%{opacity:0.7;r:16} }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <header>
+    <div class="badge">Industrie 4.0 — AGV Simulation</div>
+    <h1>Smart Rolling <span>Platform</span></h1>
+    <p>Simulation logistique · Transport autonome stock → poste de travail</p>
+  </header>
+
+  <div class="stats-bar">
+    <div class="stat">
+      <div class="stat-label">Statut</div>
+      <div class="stat-value blue" id="st-statut">PRÊT</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Missions</div>
+      <div class="stat-value green" id="st-missions">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Obstacles</div>
+      <div class="stat-value amber" id="st-obstacles">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Batterie</div>
+      <div class="stat-value green" id="st-bat">100%</div>
+    </div>
+  </div>
+
+  <div id="scene-wrap">
+    <svg id="scene" viewBox="0 0 860 400">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="3" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      <!-- Background zones -->
+      <!-- Stock zone -->
+      <rect x="20" y="30" width="180" height="160" rx="10"
+        fill="rgba(99,179,237,0.04)" stroke="rgba(99,179,237,0.25)" stroke-width="1" stroke-dasharray="5 3"/>
+      <text x="110" y="52" text-anchor="middle" font-family="'Space Mono',monospace" font-size="9"
+        letter-spacing="0.12em" fill="#63b3ed" opacity="0.7">ZONE STOCK</text>
+
+      <!-- Palettes -->
+      <rect x="36" y="62" width="44" height="32" rx="4" fill="rgba(99,179,237,0.15)" stroke="rgba(99,179,237,0.4)" stroke-width="0.5"/>
+      <text x="58" y="82" text-anchor="middle" font-family="'Space Mono',monospace" font-size="9" fill="#63b3ed">MP-A</text>
+      <rect x="90" y="62" width="44" height="32" rx="4" fill="rgba(99,179,237,0.15)" stroke="rgba(99,179,237,0.4)" stroke-width="0.5"/>
+      <text x="112" y="82" text-anchor="middle" font-family="'Space Mono',monospace" font-size="9" fill="#63b3ed">MP-B</text>
+      <rect x="144" y="62" width="44" height="32" rx="4" fill="rgba(99,179,237,0.15)" stroke="rgba(99,179,237,0.4)" stroke-width="0.5"/>
+      <text x="166" y="82" text-anchor="middle" font-family="'Space Mono',monospace" font-size="9" fill="#63b3ed">MP-C</text>
+      <rect x="36" y="106" width="44" height="32" rx="4" fill="rgba(79,209,197,0.12)" stroke="rgba(79,209,197,0.35)" stroke-width="0.5"/>
+      <text x="58" y="126" text-anchor="middle" font-family="'Space Mono',monospace" font-size="9" fill="#4fd1c5">WIP</text>
+      <rect x="90" y="106" width="44" height="32" rx="4" fill="rgba(246,173,85,0.10)" stroke="rgba(246,173,85,0.3)" stroke-width="0.5"/>
+      <text x="112" y="126" text-anchor="middle" font-family="'Space Mono',monospace" font-size="9" fill="#f6ad55">PKG</text>
+      <rect x="144" y="106" width="44" height="32" rx="4" fill="rgba(113,128,150,0.12)" stroke="rgba(113,128,150,0.3)" stroke-width="0.5"/>
+      <text x="166" y="126" text-anchor="middle" font-family="'Space Mono',monospace" font-size="9" fill="#718096">SFG</text>
+
+      <!-- Poste A -->
+      <rect x="640" y="30" width="190" height="120" rx="10"
+        fill="rgba(104,211,145,0.05)" stroke="rgba(104,211,145,0.3)" stroke-width="1"/>
+      <text x="735" y="54" text-anchor="middle" font-family="'Space Mono',monospace" font-size="9" letter-spacing="0.12em" fill="#68d391" opacity="0.7">POSTE A — ASSEMBLAGE</text>
+      <rect id="slot-a" x="675" y="66" width="120" height="64" rx="6"
+        fill="rgba(104,211,145,0.06)" stroke="rgba(104,211,145,0.2)" stroke-width="0.5" stroke-dasharray="4 3"/>
+      <text id="slot-a-label" x="735" y="103" text-anchor="middle" font-family="'Space Mono',monospace" font-size="10" fill="rgba(104,211,145,0.35)">en attente…</text>
+
+      <!-- Poste B -->
+      <rect x="640" y="250" width="190" height="120" rx="10"
+        fill="rgba(246,173,85,0.05)" stroke="rgba(246,173,85,0.3)" stroke-width="1"/>
+      <text x="735" y="274" text-anchor="middle" font-family="'Space Mono',monospace" font-size="9" letter-spacing="0.12em" fill="#f6ad55" opacity="0.7">POSTE B — CONTRÔLE</text>
+      <rect id="slot-b" x="675" y="286" width="120" height="64" rx="6"
+        fill="rgba(246,173,85,0.06)" stroke="rgba(246,173,85,0.2)" stroke-width="0.5" stroke-dasharray="4 3"/>
+      <text id="slot-b-label" x="735" y="323" text-anchor="middle" font-family="'Space Mono',monospace" font-size="10" fill="rgba(246,173,85,0.35)">en attente…</text>
+
+      <!-- Base SRP -->
+      <rect x="350" y="165" width="90" height="60" rx="8"
+        fill="rgba(99,179,237,0.06)" stroke="rgba(99,179,237,0.2)" stroke-width="0.5" stroke-dasharray="4 3"/>
+      <text x="395" y="189" text-anchor="middle" font-family="'Space Mono',monospace" font-size="8" fill="rgba(99,179,237,0.5)">BASE SRP</text>
+      <text x="395" y="206" text-anchor="middle" font-family="'Space Mono',monospace" font-size="8" fill="rgba(99,179,237,0.4)">⚡ RECHARGE</text>
+
+      <!-- IR guide paths -->
+      <path d="M200 110 L350 110 L395 165" fill="none" stroke="rgba(99,179,237,0.18)" stroke-width="1.5" stroke-dasharray="7 5"/>
+      <path d="M395 165 L395 140 L640 90" fill="none" stroke="rgba(104,211,145,0.18)" stroke-width="1.5" stroke-dasharray="7 5"/>
+      <path d="M395 225 L395 270 L640 310" fill="none" stroke="rgba(246,173,85,0.18)" stroke-width="1.5" stroke-dasharray="7 5"/>
+
+      <!-- IR path labels -->
+      <text x="290" y="103" font-family="'Space Mono',monospace" font-size="7" fill="rgba(99,179,237,0.4)" letter-spacing="0.1em">IR-GUIDE</text>
+
+      <!-- Obstacle ON path (x=565,y=87 → on Poste-A segment ~540,90) -->
+      <rect id="obstacle-rect" x="542" y="72" width="46" height="28" rx="4"
+        fill="rgba(252,129,129,0.18)" stroke="rgba(252,129,129,0.7)" stroke-width="1" opacity="0"/>
+      <text id="obstacle-text" x="565" y="88" text-anchor="middle" font-family="'Space Mono',monospace" font-size="8" fill="#fc8181" opacity="0">⛔ OBS-TRAJET</text>
+
+      <!-- Obstacle OFF path (x=461,y=230 → open floor, not on any route) -->
+      <rect id="obstacle2-rect" x="438" y="215" width="46" height="28" rx="4"
+        fill="rgba(246,173,85,0.18)" stroke="rgba(246,173,85,0.6)" stroke-width="1" opacity="0"/>
+      <text id="obstacle2-text" x="461" y="231" text-anchor="middle" font-family="'Space Mono',monospace" font-size="8" fill="#f6ad55" opacity="0">⚠ OBS-HORS</text>
+
+      <!-- SRP Robot group -->
+      <g id="srp">
+        <!-- Scan radius (hidden unless moving) -->
+        <circle id="scan" cx="0" cy="0" r="10" fill="none" stroke="rgba(99,179,237,0.2)" stroke-width="1" opacity="0"/>
+        <!-- Body -->
+        <rect x="-26" y="-16" width="52" height="32" rx="7"
+          fill="#0f172a" stroke="#63b3ed" stroke-width="1.5"/>
+        <!-- Wheels -->
+        <rect x="-24" y="-22" width="14" height="8" rx="3" fill="#1e293b" stroke="#475569" stroke-width="0.5"/>
+        <rect x="10" y="-22" width="14" height="8" rx="3" fill="#1e293b" stroke="#475569" stroke-width="0.5"/>
+        <rect x="-24" y="14" width="14" height="8" rx="3" fill="#1e293b" stroke="#475569" stroke-width="0.5"/>
+        <rect x="10" y="14" width="14" height="8" rx="3" fill="#1e293b" stroke="#475569" stroke-width="0.5"/>
+        <!-- US sensor -->
+        <rect x="20" y="-6" width="10" height="12" rx="2" fill="rgba(99,179,237,0.3)" stroke="#63b3ed" stroke-width="0.5"/>
+        <circle cx="24" cy="0" r="2" fill="#63b3ed" opacity="0.8"/>
+        <!-- Cargo area -->
+        <rect id="cargo-rect" x="-16" y="-10" width="32" height="20" rx="3"
+          fill="rgba(99,179,237,0.25)" stroke="rgba(99,179,237,0.6)" stroke-width="0.5" opacity="0"/>
+        <text id="cargo-text" x="0" y="4" text-anchor="middle" font-family="'Space Mono',monospace" font-size="8" fill="#63b3ed" opacity="0">MP-A</text>
+        <!-- SRP label -->
+        <text id="srp-label" x="0" y="4" text-anchor="middle" font-family="'Syne',sans-serif" font-size="9" font-weight="800" fill="#63b3ed" letter-spacing="0.05em">SRP</text>
+        <!-- Status LED -->
+        <circle id="led" cx="-12" cy="-8" r="4" fill="#68d391" filter="url(#glow)"/>
+      </g>
+    </svg>
+  </div>
+
+  <div class="controls">
+    <select id="dest">
+      <option value="A">→ Poste A — Assemblage (MP-A)</option>
+      <option value="B">→ Poste B — Contrôle qualité (WIP)</option>
+    </select>
+    <button class="btn-primary" id="btn-start" onclick="startMission()">▶ Lancer mission</button>
+    <button class="btn-danger" onclick="triggerObstacle(false)">⛔ Obstacle sur trajet</button>
+    <button style="font-family:var(--font-mono);font-size:11px;padding:8px 16px;border-radius:6px;cursor:pointer;border:1px solid var(--warn);background:rgba(246,173,85,0.10);color:var(--warn);letter-spacing:0.05em;white-space:nowrap" onclick="triggerObstacle(true)">⚠ Obstacle hors trajet</button>
+    <button class="btn-reset" onclick="resetSim()">↺ Reset</button>
+  </div>
+
+  <div class="card" style="padding:0;overflow:hidden">
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border)">
+      <div style="width:6px;height:6px;border-radius:50%;background:#68d391;animation:blink 1.5s infinite"></div>
+      <span style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.12em;color:var(--muted)">JOURNAL DE BORD — SYSTÈME SRP</span>
+    </div>
+    <div id="log-box">
+      <span class="log-info">— Système SRP v1.0 initialisé. Tous les capteurs opérationnels.</span>
+    </div>
+    <div style="padding:10px 14px;border-top:1px solid var(--border)">
+      <div class="bat-wrap">
+        <span style="font-family:var(--font-mono);font-size:9px;color:var(--muted);letter-spacing:0.1em">BATTERIE</span>
+        <div class="bat-track"><div id="bat-fill" style="width:100%;background:#68d391"></div></div>
+        <span class="bat-label" id="bat-pct">100%</span>
+      </div>
+    </div>
+  </div>
+
+  <footer>SRP — Smart Rolling Platform · Industrie 4.0 · Simulation prototype</footer>
+</div>
+
+<script>
+const srp = document.getElementById('srp');
+const led = document.getElementById('led');
+const scan = document.getElementById('scan');
+const cargoRect = document.getElementById('cargo-rect');
+const cargoText = document.getElementById('cargo-text');
+const srpLabel = document.getElementById('srp-label');
+const logBox = document.getElementById('log-box');
+const obstacleRect = document.getElementById('obstacle-rect');
+const obstacleTextEl = document.getElementById('obstacle-text');
+
+let running = false, animFrame = null;
+let battery = 100, missionCount = 0, obstacleCount = 0;
+
+// Obstacle: fixed position on SVG (on the Poste-A path segment ~540,90)
+const OBSTACLE = { x: 565, y: 87, active: false };
+const US_RANGE = 70;      // sensor detection range (SVG units)
+const PATH_MARGIN = 22;   // max distance from segment line = "on the path"
+
+let robotX = 395, robotY = 195;
+// Current segment the robot is travelling (set before each animateTo call)
+let segX1=395,segY1=195, segX2=395,segY2=195;
+
+const waypoints = {
+  A: [
+    {x:395,y:195, s:'BASE → STOCK',        led:'#63b3ed', dur:700},
+    {x:280,y:110, s:'EN ROUTE → STOCK',    led:'#f6ad55', dur:800, scan:true},
+    {x:140,y:90,  s:'CHARGEMENT MP-A',     led:'#63b3ed', dur:700, load:true, cargo:'MP-A'},
+    {x:280,y:110, s:'TRANSPORT → POSTE A', led:'#f6ad55', dur:800, scan:true},
+    {x:395,y:110, s:'TRANSIT CENTRAL',     led:'#f6ad55', dur:700},
+    {x:540,y:90,  s:'APPROCHE POSTE A',    led:'#f6ad55', dur:700},
+    {x:670,y:90,  s:'LIVRAISON POSTE A',   led:'#68d391', dur:600, deliver:'A'},
+    {x:540,y:160, s:'RETOUR BASE',         led:'#f6ad55', dur:700},
+    {x:395,y:195, s:'BASE — TERMINÉE',     led:'#68d391', dur:600}
+  ],
+  B: [
+    {x:395,y:195, s:'BASE → STOCK',        led:'#63b3ed', dur:700},
+    {x:280,y:140, s:'EN ROUTE → STOCK',    led:'#f6ad55', dur:800, scan:true},
+    {x:140,y:120, s:'CHARGEMENT WIP',      led:'#63b3ed', dur:700, load:true, cargo:'WIP'},
+    {x:280,y:200, s:'TRANSPORT → POSTE B', led:'#f6ad55', dur:800, scan:true},
+    {x:395,y:270, s:'TRANSIT CENTRAL',     led:'#f6ad55', dur:700},
+    {x:540,y:305, s:'APPROCHE POSTE B',    led:'#f6ad55', dur:700},
+    {x:670,y:310, s:'LIVRAISON POSTE B',   led:'#68d391', dur:600, deliver:'B'},
+    {x:540,y:230, s:'RETOUR BASE',         led:'#f6ad55', dur:700},
+    {x:395,y:195, s:'BASE — TERMINÉE',     led:'#68d391', dur:600}
+  ]
+};
+
+function setPos(x, y) {
+  robotX = x; robotY = y;
+  srp.setAttribute('transform', `translate(${x},${y})`);
+}
+
+function dist(ax,ay,bx,by) {
+  return Math.sqrt((ax-bx)**2+(ay-by)**2);
+}
+
+// Distance from point P to segment AB (clamped projection)
+function distPointToSegment(px,py, ax,ay, bx,by) {
+  const dx=bx-ax, dy=by-ay;
+  const lenSq = dx*dx+dy*dy;
+  if (lenSq===0) return dist(px,py,ax,ay);
+  const t = Math.max(0, Math.min(1, ((px-ax)*dx+(py-ay)*dy)/lenSq));
+  return dist(px,py, ax+t*dx, ay+t*dy);
+}
+
+// Is obstacle within US_RANGE of robot AND lies on current segment (within PATH_MARGIN)?
+function obstacleOnCurrentPath() {
+  if (!OBSTACLE.active) return false;
+  const dToRobot = dist(robotX, robotY, OBSTACLE.x, OBSTACLE.y);
+  if (dToRobot > US_RANGE) return false; // outside sensor range → not detected at all yet
+  // Obstacle is within sensor range — now check if it sits on the current segment
+  const dToSeg = distPointToSegment(OBSTACLE.x, OBSTACLE.y, segX1,segY1, segX2,segY2);
+  return dToSeg <= PATH_MARGIN;
+}
+
+// Obstacle is detected by sensor but NOT on path
+function obstacleDetectedOffPath() {
+  if (!OBSTACLE.active) return false;
+  const dToRobot = dist(robotX, robotY, OBSTACLE.x, OBSTACLE.y);
+  if (dToRobot > US_RANGE) return false;
+  const dToSeg = distPointToSegment(OBSTACLE.x, OBSTACLE.y, segX1,segY1, segX2,segY2);
+  return dToSeg > PATH_MARGIN;
+}
+
+function log(msg, type='') {
+  const t = new Date().toLocaleTimeString('fr-FR');
+  const span = document.createElement('span');
+  span.className = type ? `log-${type}` : '';
+  span.textContent = `\n[${t}] ${msg}`;
+  logBox.appendChild(span);
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+function setBattery(v) {
+  battery = Math.max(0, v);
+  const pct = Math.round(battery);
+  document.getElementById('bat-fill').style.width = pct+'%';
+  document.getElementById('bat-fill').style.background =
+    pct>50?'#68d391':pct>20?'#f6ad55':'#fc8181';
+  document.getElementById('bat-pct').textContent = pct+'%';
+  document.getElementById('st-bat').textContent = pct+'%';
+  document.getElementById('st-bat').className = `stat-value ${pct>50?'green':pct>20?'amber':'red'}`;
+}
+
+function updateStats(status) {
+  document.getElementById('st-statut').textContent = status;
+  document.getElementById('st-missions').textContent = missionCount;
+  document.getElementById('st-obstacles').textContent = obstacleCount;
+}
+
+function sleep(ms) { return new Promise(r=>setTimeout(r,ms)); }
+
+// Core animation — checks obstacle type every frame
+function animateTo(x1,y1,x2,y2,dur,wpLed) {
+  segX1=x1; segY1=y1; segX2=x2; segY2=y2; // expose current segment globally
+  return new Promise(res => {
+    let elapsed=0, lastTime=null;
+    let blockLogged=false, offPathLogged=false;
+
+    function step(now) {
+      if (lastTime===null) lastTime=now;
+      const delta = now-lastTime;
+      lastTime=now;
+
+      // --- CAS 1 : obstacle SUR le chemin → arrêt complet ---
+      if (obstacleOnCurrentPath()) {
+        if (!blockLogged) {
+          blockLogged=true;
+          led.setAttribute('fill','#fc8181');
+          updateStats('ARRÊT SÉCURITÉ');
+          log('⛔ Obstacle sur le trajet — arrêt sécurité activé', 'err');
+        }
+        animFrame=requestAnimationFrame(step);
+        return; // freeze, don't advance
+      }
+
+      // Resumed after on-path obstacle cleared
+      if (blockLogged) {
+        blockLogged=false;
+        led.setAttribute('fill', wpLed);
+        log('✓ Trajet dégagé — reprise automatique de la mission', 'ok');
+      }
+
+      // --- CAS 2 : obstacle HORS chemin → détection seule, on continue ---
+      if (obstacleDetectedOffPath()) {
+        if (!offPathLogged) {
+          offPathLogged=true;
+          log('⚠ Obstacle détecté (hors trajet) — robot continue sa mission', 'warn');
+        }
+      } else {
+        offPathLogged=false;
+      }
+
+      // Normal movement
+      elapsed = Math.min(elapsed+delta, dur);
+      const t = elapsed/dur;
+      const ease = t<0.5?2*t*t:-1+(4-2*t)*t;
+      setPos(x1+(x2-x1)*ease, y1+(y2-y1)*ease);
+
+      if (elapsed<dur) animFrame=requestAnimationFrame(step);
+      else res();
+    }
+    animFrame=requestAnimationFrame(step);
+  });
+}
+
+// OFF-PATH obstacle fixed position (open floor, never on any route)
+const OBSTACLE2 = { x: 461, y: 229 };
+
+function triggerObstacle(offPath) {
+  if (!running || OBSTACLE.active) return;
+  obstacleCount++;
+  document.getElementById('st-obstacles').textContent = obstacleCount;
+
+  if (!offPath) {
+    // ON-PATH obstacle: place at 565,87 (on Poste-A segment 540,90→670,90)
+    OBSTACLE.x = 565; OBSTACLE.y = 87;
+    OBSTACLE.active = true;
+    obstacleRect.setAttribute('opacity','1');
+    obstacleTextEl.setAttribute('opacity','1');
+    const dToSeg = distPointToSegment(OBSTACLE.x,OBSTACLE.y, segX1,segY1, segX2,segY2);
+    const dToRobot = Math.round(dist(robotX,robotY,OBSTACLE.x,OBSTACLE.y));
+    if (dToRobot > US_RANGE) {
+      log(`📡 Obstacle sur trajet placé — hors portée capteur (${dToRobot}px). Arrêt dès approche.`,'warn');
+    } else {
+      log(`⛔ Obstacle sur le trajet détecté (dist: ${dToRobot}px) — arrêt immédiat`,'err');
+    }
+    setTimeout(()=>{
+      OBSTACLE.active=false;
+      obstacleRect.setAttribute('opacity','0');
+      obstacleTextEl.setAttribute('opacity','0');
+    }, 4500);
+  } else {
+    // OFF-PATH obstacle: place at 461,229 (middle of open floor)
+    OBSTACLE.x = OBSTACLE2.x; OBSTACLE.y = OBSTACLE2.y;
+    OBSTACLE.active = true;
+    document.getElementById('obstacle2-rect').setAttribute('opacity','1');
+    document.getElementById('obstacle2-text').setAttribute('opacity','1');
+    log(`⚠ Obstacle hors trajet détecté — le robot continue sa mission normalement`,'warn');
+    setTimeout(()=>{
+      OBSTACLE.active=false;
+      document.getElementById('obstacle2-rect').setAttribute('opacity','0');
+      document.getElementById('obstacle2-text').setAttribute('opacity','0');
+    }, 4500);
+  }
+}
+
+async function startMission() {
+  if (running) return;
+  running = true;
+  document.getElementById('btn-start').disabled = true;
+  const dest = document.getElementById('dest').value;
+  const wps = waypoints[dest];
+  const cargoName = dest === 'A' ? 'MP-A' : 'WIP';
+  missionCount++;
+  updateStats('ACTIF');
+  log(`▶ Mission #${missionCount} — destination Poste ${dest} · charge : ${cargoName}`, 'info');
+
+  let cx=395, cy=195;
+
+  for (let i=0; i<wps.length; i++) {
+    const wp = wps[i];
+    led.setAttribute('fill', wp.led);
+    if (wp.scan) { scan.setAttribute('opacity','1'); } else { scan.setAttribute('opacity','0'); }
+
+    await animateTo(cx, cy, wp.x, wp.y, wp.dur, wp.led);
+    cx=wp.x; cy=wp.y;
+    setBattery(battery - 0.18);
+    updateStats(wp.s);
+
+    if (wp.load) {
+      cargoText.textContent = cargoName;
+      cargoRect.setAttribute('opacity','1');
+      cargoText.setAttribute('opacity','1');
+      srpLabel.setAttribute('opacity','0');
+      log(`📦 Chargement : ${cargoName} embarqué sur le SRP`, 'info');
+      await sleep(400);
+    }
+    if (wp.deliver) {
+      cargoRect.setAttribute('opacity','0');
+      cargoText.setAttribute('opacity','0');
+      srpLabel.setAttribute('opacity','1');
+      scan.setAttribute('opacity','0');
+      if (wp.deliver==='A') {
+        document.getElementById('slot-a').setAttribute('fill','rgba(104,211,145,0.15)');
+        document.getElementById('slot-a').setAttribute('stroke-dasharray','none');
+        document.getElementById('slot-a-label').textContent = cargoName;
+        document.getElementById('slot-a-label').setAttribute('fill','#68d391');
+      } else {
+        document.getElementById('slot-b').setAttribute('fill','rgba(246,173,85,0.15)');
+        document.getElementById('slot-b').setAttribute('stroke-dasharray','none');
+        document.getElementById('slot-b-label').textContent = cargoName;
+        document.getElementById('slot-b-label').setAttribute('fill','#f6ad55');
+      }
+      log(`✅ Livraison confirmée → Poste ${wp.deliver}`, 'ok');
+      await sleep(350);
+    }
+    await sleep(80);
+  }
+
+  scan.setAttribute('opacity','0');
+  log(`🔋 Batterie : ${Math.round(battery)}% · Mission #${missionCount} terminée avec succès`, 'ok');
+  updateStats('PRÊT');
+  running = false;
+  document.getElementById('btn-start').disabled = false;
+}
+
+function resetSim() {
+  if (animFrame) cancelAnimationFrame(animFrame);
+  running = false;
+  OBSTACLE.active = false;
+  setBattery(100); missionCount = 0; obstacleCount = 0;
+  setPos(395, 195);
+  led.setAttribute('fill','#68d391');
+  scan.setAttribute('opacity','0');
+  cargoRect.setAttribute('opacity','0');
+  cargoText.setAttribute('opacity','0');
+  srpLabel.setAttribute('opacity','1');
+  obstacleRect.setAttribute('opacity','0');
+  obstacleTextEl.setAttribute('opacity','0');
+  document.getElementById('obstacle2-rect').setAttribute('opacity','0');
+  document.getElementById('obstacle2-text').setAttribute('opacity','0');
+  document.getElementById('slot-a').setAttribute('fill','rgba(104,211,145,0.06)');
+  document.getElementById('slot-a').setAttribute('stroke-dasharray','4 3');
+  document.getElementById('slot-a-label').textContent = 'en attente…';
+  document.getElementById('slot-a-label').setAttribute('fill','rgba(104,211,145,0.35)');
+  document.getElementById('slot-b').setAttribute('fill','rgba(246,173,85,0.06)');
+  document.getElementById('slot-b').setAttribute('stroke-dasharray','4 3');
+  document.getElementById('slot-b-label').textContent = 'en attente…';
+  document.getElementById('slot-b-label').setAttribute('fill','rgba(246,173,85,0.35)');
+  document.getElementById('btn-start').disabled = false;
+  logBox.innerHTML = '<span class="log-info">— Système SRP réinitialisé. Prêt pour nouvelle mission.</span>';
+  updateStats('PRÊT');
+}
+
+setPos(395, 195);
+</script>
+</body>
+</html>
