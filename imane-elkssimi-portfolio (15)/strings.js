@@ -12,7 +12,7 @@ const UI_STRINGS = {
 en: {
   htmlLang: "en",
   nav: { home: "Home", about: "About", experience: "Experience", projects: "Projects", certifications: "Certifications", activities: "Activities", contact: "Contact", downloadCV: "Download CV" },
-  hero: { viewCV: "View my CV", getInTouch: "Get in touch", linkedin: "LinkedIn ↗", schoolTag: "ENSA Agadir", programTag: "Génie Industriel" },
+  hero: { viewCV: "View my CV", getInTouch: "Get in touch", linkedin: "LinkedIn ↗", schoolTag: "ENSA Agadir", programTag: "Industrial Engineering" },
   about: { eyebrow: "Engineering Profile", heading: "About", aboutMeLabel: "How I Think", focusLabel: "What I Bring" },
   transitionNone: true,
   experience: { heading: "Professional Experience", sub: "A progression across quality, continuous improvement, supply chain and digitalization — click any experience for the full case study.", viewExperience: "View experience →", gallery: "Gallery", downloadReport: "Download internship report ↓" },
